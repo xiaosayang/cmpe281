@@ -1,6 +1,6 @@
 import webtest
 
-import main
+import hello281
 
 
 def test_get():
