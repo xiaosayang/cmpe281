@@ -4,16 +4,16 @@ import uuid
 
 from pymongo import MongoClient
 
-import datetime
+from datetime import datetime
 import random
+import math
 
 client = MongoClient('mongodb://localhost:27017')
 db = client["sensorDB"]
 mycol = db["sensorCollection"]
 
-sensor_URL = 'http://ec2-3-81-30-51.compute-1.amazonaws.com:8080/getAllSensor'
-mongo_URL = 'http://52.53.157.50:8080/save'
-
+sensor_URL = 'http://ec2-3-81-127-12.compute-1.amazonaws.com:8080/getAllSensor'
+mongo_URL = 'http://54.67.113.246:8080/save'
 
 # Declare class for clusterNode
 class ClusterNode:
@@ -40,32 +40,29 @@ class Sensor:
         self.sensorType = sensorType
         self.sensorStatus = status
 
-    def checkSensorStatus(self ):
+    def checkSensorStatus(self):
         if self.sensorStatus == "Active":
             #print("Sensor is active: ", self.sensorID)
             return True
 
-    def generate_temperature_data(self, id):
-            db.mycol.insert_one({"Sensor ID": id, "Timestamp":
-            datetime.datetime.fromtimestamp(datetime.datetime.now().timestamp()).isoformat(),
-                         "Sensor Value": random.randint(65, 80)})
+    def generate_temperature_data(self, id, currtime):
+            x = math.sin(((currtime / 86400) * 36) * math.pi * 2) * 15 + 65
+            db.mycol.insert_one({"Sensor ID": id, "Timestamp": datetime.now(), "Sensor Value": x})
 
-    def generate_water_data(self, id):
-            choice_list = ["Yes", "No"]
-            db.mycol.insert_one({"Sensor ID": id, "Timestamp":
-            datetime.datetime.fromtimestamp(datetime.datetime.now().timestamp()).isoformat(),
-                         "Sensor Value": random.choice(choice_list)})
+    def generate_water_data(self, id, currtime):
+            choice_list = [1, 0]
+            x = math.sin(((currtime / 86400) * 36) * math.pi * 2) * 0.5 + 0.5
+            db.mycol.insert_one({"Sensor ID": id, "Timestamp": datetime.now(), "Sensor Value": round(x)})
 
-    def generate_ph_data(self, id):
-            db.mycol.insert_one({"Sensor ID": id, "Timestamp":
-            datetime.datetime.fromtimestamp(datetime.datetime.now().timestamp()).isoformat(),
-                         "Sensor Value": round(random.uniform(5.0, 7.0), 2)})
+    def generate_ph_data(self, id, currtime):
+            x = math.sin(((currtime / 86400) / 30) * math.pi * 2) * 1 + 6
+            db.mycol.insert_one({"Sensor ID": id, "Timestamp": datetime.now(), "Sensor Value": x})
 
 
 if __name__ == '__main__':
     # app.run()
     r = requests.get(sensor_URL).json()
-    #print(r)
+    print(r)
     sensorObj=[]
     for item in r:
         sensorL = []
@@ -79,21 +76,28 @@ if __name__ == '__main__':
     while time.time() <= current_time_in_sec + 60:
         for item in sensorObj:
             if item.sensorStatus == "Active":
-                if item.sensorType == "Temperature ":
-                    item.generate_temperature_data(item.sensorID)
+                if item.sensorType == "Temperature":
+                    item.generate_temperature_data(item.sensorID, time.time())
                 elif item.sensorType == "Water":
-                    item.generate_water_data(item.sensorID)
+                    item.generate_water_data(item.sensorID, time.time())
                 elif item.sensorType == "PH":
-                    item.generate_ph_data(item.sensorID)
+                    item.generate_ph_data(item.sensorID, time.time())
         time.sleep(5)
     print("Simulator Off")
     data_list = []
     mydoc = db.mycol.find({}, {"_id": 0})
+
     for x in mydoc:
         data_list.append(x)
     #print(data_list[0])
+    print("Sending Data....")
     for item in data_list:
-        print(item.get('Sensor ID'), item.get("Timestamp"), type(item.get("Sensor Value")))
+        #print(item.get('Sensor ID'), item.get("Timestamp"), item.get("Sensor Value"))
         requests.post(mongo_URL, data={'sensor_id': item.get('Sensor ID'),
                                        'd': item.get("Timestamp"), 'value': item.get("Sensor Value")})
+    print("Done")
+    data_list.clear()
+    db.mycol.drop()
+    
+
 
